@@ -8,6 +8,14 @@
       "sha256": "2a97ba0dc14658ce1d25acbccafb99393e05277de1525e8a0de85dc4c07e1846",
       "description": "Command-line JSON processor",
       "bin": ["jq"]
+    },
+    {
+      "name": "jq-linux-x86_64",
+      "version": "1.8.2",
+      "url": "https://github.com/s1ghty/fap-registry/releases/download/jq-1.8.2-linux-x86_64/jq-1.8.2-linux-x86_64.tar.zst",
+      "sha256": "ca82e217aa862dbdeb084ac8636e7581a619f7fef8a2e9f1d8d52a24e518d6a7",
+      "description": "Command-line JSON processor (Linux x86_64 static binary)",
+      "bin": ["jq"]
     }
   ]
 }
