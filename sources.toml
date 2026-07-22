@@ -1,0 +1,25 @@
+# sources.toml — upstream GitHub releases tracked by update.sh.
+#
+# Each [[package]] row maps one stable.json entry to the upstream GitHub
+# repo/release/asset it's built from, so update.sh can check for a newer
+# release and repackage it automatically. If a row's "name" isn't in
+# stable.json yet, update.sh adds it as a new package.
+#
+# Fields:
+#   name             stable.json package name (must match exactly)
+#   repo             upstream "owner/repo" on GitHub
+#   asset            release asset filename to download (must match exactly)
+#   bin              binary name inside the package's bin/ directory
+#   platform         platform suffix used in the artifact filename/tag (optional)
+#   description      stable.json description field (optional)
+#   version_prefix   prefix stripped from the release tag to get the version
+#                    (optional, e.g. tag "jq-1.8.2" with version_prefix "jq-" -> "1.8.2")
+
+[[package]]
+name = "jq"
+repo = "jqlang/jq"
+asset = "jq-linux-amd64"
+bin = "jq"
+platform = "linux-x86_64"
+description = "Command-line JSON processor (Linux x86_64 static binary)"
+version_prefix = "jq-"
