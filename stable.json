@@ -7,7 +7,19 @@
       "url": "https://github.com/s1ghty/fap-registry/releases/download/jq-1.8.2-linux-x86_64/jq-1.8.2-linux-x86_64.tar.zst",
       "sha256": "ca82e217aa862dbdeb084ac8636e7581a619f7fef8a2e9f1d8d52a24e518d6a7",
       "description": "Command-line JSON processor (Linux x86_64 static binary)",
-      "bin": ["jq"]
+      "bin": [
+        "jq"
+      ]
+    },
+    {
+      "name": "jq-macos-arm64",
+      "version": "1.8.2",
+      "url": "https://github.com/s1ghty/fap-registry/releases/download/jq-macos-arm64-1.8.2-macos-arm64/jq-macos-arm64-1.8.2-macos-arm64.tar.zst",
+      "sha256": "0f4a631c1cfb803fac31bb5a57e6cf8c76c05805507d3cc9988e73401a153a2c",
+      "description": "Command-line JSON processor (macOS arm64 binary)",
+      "bin": [
+        "jq"
+      ]
     }
   ]
 }
