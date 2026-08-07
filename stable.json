@@ -8,6 +8,14 @@
       "sha256": "ca82e217aa862dbdeb084ac8636e7581a619f7fef8a2e9f1d8d52a24e518d6a7",
       "description": "Command-line JSON processor (Linux x86_64 static binary)",
       "bin": ["jq"]
+    },
+    {
+      "name": "fastfetch",
+      "version": "2.67.0",
+      "url": "https://github.com/s1ghty/fap-registry/releases/download/fastfetch-2.67.0-linux-x86_64/fastfetch-2.67.0-linux-x86_64.tar.zst",
+      "sha256": "ddf51d46c2a4926c2a2f7daff700b9b3645c154993c7869eaab0d8c3b66d576c",
+      "description": "Feature-rich, performance-oriented system information tool (Linux x86_64)",
+      "bin": ["fastfetch"]
     }
   ]
 }
