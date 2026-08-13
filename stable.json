@@ -7,7 +7,9 @@
       "url": "https://github.com/s1ghty/fap-registry/releases/download/jq-1.8.2-linux-x86_64/jq-1.8.2-linux-x86_64.tar.zst",
       "sha256": "ca82e217aa862dbdeb084ac8636e7581a619f7fef8a2e9f1d8d52a24e518d6a7",
       "description": "Command-line JSON processor (Linux x86_64 static binary)",
-      "bin": ["jq"]
+      "bin": [
+        "jq"
+      ]
     },
     {
       "name": "fastfetch",
@@ -15,7 +17,19 @@
       "url": "https://github.com/s1ghty/fap-registry/releases/download/fastfetch-2.67.0-linux-x86_64/fastfetch-2.67.0-linux-x86_64.tar.zst",
       "sha256": "ddf51d46c2a4926c2a2f7daff700b9b3645c154993c7869eaab0d8c3b66d576c",
       "description": "Feature-rich, performance-oriented system information tool (Linux x86_64)",
-      "bin": ["fastfetch"]
+      "bin": [
+        "fastfetch"
+      ]
+    },
+    {
+      "name": "htop",
+      "version": "3.5.2",
+      "url": "https://github.com/s1ghty/fap-registry/releases/download/htop-3.5.2-linux-x86_64/htop-3.5.2-linux-x86_64.tar.zst",
+      "sha256": "7bb61ffc0861f711869bfa10c08ab6e3b0fae2e1f67d052e9fd77c9eb4192557",
+      "description": "Interactive process viewer (Linux x86_64, built from source)",
+      "bin": [
+        "htop"
+      ]
     }
   ]
 }
