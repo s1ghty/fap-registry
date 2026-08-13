@@ -3,7 +3,12 @@ name: Update packages
 on:
   schedule:
     - cron: "17 6 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Repackage this one tracked package even if its version hasn't changed (e.g. after a package.sh change) — leave blank for a normal run"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -31,4 +36,10 @@ jobs:
       - name: Run update.sh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./update.sh
+          FORCE_NAME: ${{ github.event.inputs.force }}
+        run: |
+          if [ -n "$FORCE_NAME" ]; then
+            ./update.sh --force "$FORCE_NAME"
+          else
+            ./update.sh
+          fi
