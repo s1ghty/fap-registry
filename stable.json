@@ -25,10 +25,14 @@
       "name": "htop",
       "version": "3.5.2",
       "url": "https://github.com/s1ghty/fap-registry/releases/download/htop-3.5.2-linux-x86_64/htop-3.5.2-linux-x86_64.tar.zst",
-      "sha256": "7bb61ffc0861f711869bfa10c08ab6e3b0fae2e1f67d052e9fd77c9eb4192557",
+      "sha256": "21215fe785efa039824f560c338a3b2c4287570e9e2f2c8497d1cc31e72ec6b3",
       "description": "Interactive process viewer (Linux x86_64, built from source)",
       "bin": [
         "htop"
+      ],
+      "libs": [
+        "libncursesw.so.6",
+        "libtinfo.so.6"
       ]
     }
   ]
