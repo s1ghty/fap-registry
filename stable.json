@@ -34,6 +34,19 @@
         "libncursesw.so.6",
         "libtinfo.so.6"
       ]
+    },
+    {
+      "name": "ffmpeg",
+      "version": "latest",
+      "url": "https://github.com/s1ghty/fap-registry/releases/download/ffmpeg-latest-linux-x86_64/ffmpeg-latest-linux-x86_64.tar.zst",
+      "sha256": "033fd75bdcd328e9d0acb0cb2ce90ca327959acfb156e4764786b87dd41d896d",
+      "description": "Complete, cross-platform solution to record, convert, and stream audio and video (Linux x86_64, GPL build)",
+      "bin": [
+        "ffmpeg"
+      ],
+      "libs": [
+        "libmvec.so.1"
+      ]
     }
   ]
 }
