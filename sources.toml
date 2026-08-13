@@ -1,19 +1,36 @@
 # sources.toml — upstream GitHub releases tracked by update.sh.
 #
 # Each [[package]] row maps one stable.json entry to the upstream GitHub
-# repo/release/asset it's built from, so update.sh can check for a newer
-# release and repackage it automatically. If a row's "name" isn't in
-# stable.json yet, update.sh adds it as a new package.
+# repo/release it's built from, so update.sh can check for a newer release
+# and repackage it automatically. If a row's "name" isn't in stable.json
+# yet, update.sh adds it as a new package.
 #
 # Fields:
 #   name             stable.json package name (must match exactly)
 #   repo             upstream "owner/repo" on GitHub
-#   asset            release asset filename to download (must match exactly)
 #   bin              binary name inside the package's bin/ directory
 #   platform         platform suffix used in the artifact filename/tag (optional)
 #   description      stable.json description field (optional)
 #   version_prefix   prefix stripped from the release tag to get the version
 #                    (optional, e.g. tag "jq-1.8.2" with version_prefix "jq-" -> "1.8.2")
+#
+# How the binary is obtained — three modes:
+#
+#   1. Direct binary asset (default). Set "asset" to a release asset
+#      filename that IS the binary itself, downloaded as-is. This is jq's
+#      shape below: "jq-linux-amd64" is a raw executable, no archive.
+#
+#   2. Archive asset. Set "asset" to a release asset filename that's an
+#      archive (.tar.gz/.tar.xz/.tar.zst/...), and "bin_path" to the
+#      binary's path inside it once extracted. This is fastfetch's shape
+#      below: the release ships a .tar.gz with the binary nested inside.
+#
+#   3. Build from source. Set "build_from_source" to "true" instead of
+#      setting "asset" at all. update.sh shallow-clones "repo" at the
+#      release tag, runs "build_cmd" inside it (installing "build_deps" via
+#      apt first, if set), and expects the resulting binary at "bin_path"
+#      relative to the clone root. For projects like htop that don't
+#      publish a prebuilt Linux binary at all.
 
 [[package]]
 name = "jq"
@@ -32,3 +49,23 @@ bin = "jq"
 platform = "macos-arm64"
 description = "Command-line JSON processor (macOS arm64 binary)"
 version_prefix = "jq-"
+
+[[package]]
+name = "fastfetch"
+repo = "fastfetch-cli/fastfetch"
+asset = "fastfetch-linux-amd64.tar.gz"
+bin_path = "fastfetch-linux-amd64/usr/bin/fastfetch"
+bin = "fastfetch"
+platform = "linux-x86_64"
+description = "Feature-rich, performance-oriented system information tool (Linux x86_64)"
+
+[[package]]
+name = "htop"
+repo = "htop-dev/htop"
+build_from_source = "true"
+build_deps = "libncursesw5-dev autoconf automake pkg-config"
+build_cmd = "./autogen.sh && ./configure && make"
+bin_path = "htop"
+bin = "htop"
+platform = "linux-x86_64"
+description = "Interactive process viewer (Linux x86_64, built from source)"

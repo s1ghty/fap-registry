@@ -6,21 +6,33 @@
 #   1. Fetch the latest release of its upstream "repo" via the GitHub API.
 #   2. Compare that release's version against stable.json's current entry
 #      (missing entries count as outdated, i.e. "add this package").
-#   3. If newer: download the release asset, repackage it with package.sh,
-#      upload the tarball as a release asset on this repo, update
-#      stable.json on a fresh branch, and open a PR.
+#   3. If newer, obtain the binary one of three ways (see sources.toml's
+#      field docs for which fields select which mode):
+#        - direct binary asset: downloaded as-is
+#        - archive asset: downloaded and extracted, binary at "bin_path"
+#        - build_from_source: shallow-clone "repo" at the release tag, run
+#          "build_cmd" (installing "build_deps" via apt first), binary at
+#          "bin_path" relative to the clone root — for projects like htop
+#          that don't publish a prebuilt Linux binary at all
+#      Then repackage it with package.sh, upload the tarball as a release
+#      asset on this repo, update stable.json on a fresh branch, and open
+#      a PR.
 #
 # Usage:
 #   ./update.sh [options]
 #
 # Options:
-#   -n, --dry-run          Check for updates but don't download, package,
-#                           push, or open anything.
+#   -n, --dry-run          Check for updates but don't download, build,
+#                           package, push, or open anything.
 #   -s, --sources FILE     Sources file (default: sources.toml).
 #   -i, --index FILE       Index file to update (default: stable.json).
 #   -h, --help             Show this help.
 #
-# Requires: curl, jq, tar, zstd, git, gh (authenticated), awk.
+# Requires: curl, jq, tar, zstd, git, gh (authenticated), awk. A
+# build_from_source package additionally needs whatever its build_cmd
+# needs (build_deps installs these via `apt-get`, so this only really
+# works on a Debian/Ubuntu CI runner — which is exactly what the
+# accompanying GitHub Actions workflow runs on).
 
 set -euo pipefail
 
@@ -109,6 +121,7 @@ skipped=0
 process_package() {
     local pkg_json=$1
     local name repo asset bin platform description version_prefix
+    local build_from_source build_deps build_cmd bin_path
     name=$(jq -r '.name // empty' <<<"$pkg_json")
     repo=$(jq -r '.repo // empty' <<<"$pkg_json")
     asset=$(jq -r '.asset // empty' <<<"$pkg_json")
@@ -116,8 +129,17 @@ process_package() {
     platform=$(jq -r '.platform // empty' <<<"$pkg_json")
     description=$(jq -r '.description // empty' <<<"$pkg_json")
     version_prefix=$(jq -r '.version_prefix // empty' <<<"$pkg_json")
+    build_from_source=$(jq -r '.build_from_source // empty' <<<"$pkg_json")
+    build_deps=$(jq -r '.build_deps // empty' <<<"$pkg_json")
+    build_cmd=$(jq -r '.build_cmd // empty' <<<"$pkg_json")
+    bin_path=$(jq -r '.bin_path // empty' <<<"$pkg_json")
 
-    if [ -z "$name" ] || [ -z "$repo" ] || [ -z "$asset" ] || [ -z "$bin" ]; then
+    if [ "$build_from_source" = "true" ]; then
+        if [ -z "$name" ] || [ -z "$repo" ] || [ -z "$bin" ] || [ -z "$build_cmd" ] || [ -z "$bin_path" ]; then
+            echo "skip: sources.toml entry missing name/repo/bin/build_cmd/bin_path for a build_from_source package: $pkg_json" >&2
+            return 1
+        fi
+    elif [ -z "$name" ] || [ -z "$repo" ] || [ -z "$asset" ] || [ -z "$bin" ]; then
         echo "skip: sources.toml entry missing name/repo/asset/bin: $pkg_json" >&2
         return 1
     fi
@@ -156,15 +178,21 @@ process_package() {
 
     echo "outdated: $name ${current_version:-<not indexed>} -> $latest_version" >&2
 
-    local asset_url
-    asset_url=$(jq -r --arg a "$asset" '.assets[] | select(.name==$a) | .browser_download_url' <<<"$release_json")
-    if [ -z "$asset_url" ]; then
-        echo "skip: $name: release $tag_name has no asset named $asset" >&2
-        return 1
+    local asset_url=""
+    if [ "$build_from_source" != "true" ]; then
+        asset_url=$(jq -r --arg a "$asset" '.assets[] | select(.name==$a) | .browser_download_url' <<<"$release_json")
+        if [ -z "$asset_url" ]; then
+            echo "skip: $name: release $tag_name has no asset named $asset" >&2
+            return 1
+        fi
     fi
 
     if [ "$DRY_RUN" = "1" ]; then
-        echo "dry-run: would download $asset_url and open a PR updating $name to $latest_version" >&2
+        if [ "$build_from_source" = "true" ]; then
+            echo "dry-run: would clone $repo@$tag_name, run '$build_cmd', and open a PR updating $name to $latest_version" >&2
+        else
+            echo "dry-run: would download $asset_url and open a PR updating $name to $latest_version" >&2
+        fi
         return 0
     fi
 
@@ -174,16 +202,41 @@ process_package() {
         return 0
     fi
 
-    local work bin_path
+    local work resolved_bin
     work=$(mktemp -d)
     trap 'rm -rf "$work"' RETURN
-    bin_path="$work/$asset"
-    curl -fsSL -o "$bin_path" "$asset_url" || { echo "skip: $name: failed to download $asset_url" >&2; return 1; }
-    chmod +x "$bin_path"
+
+    if [ "$build_from_source" = "true" ]; then
+        if [ -n "$build_deps" ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq $build_deps
+        fi
+        if ! git clone --quiet --depth 1 --branch "$tag_name" "https://github.com/$repo.git" "$work/src"; then
+            echo "skip: $name: git clone of $repo@$tag_name failed" >&2
+            return 1
+        fi
+        if ! ( cd "$work/src" && eval "$build_cmd" ); then
+            echo "skip: $name: build command failed" >&2
+            return 1
+        fi
+        resolved_bin="$work/src/$bin_path"
+    elif [ -n "$bin_path" ]; then
+        # archive asset: download, extract, the binary is at bin_path inside it
+        local downloaded="$work/$asset"
+        curl -fsSL -o "$downloaded" "$asset_url" || { echo "skip: $name: failed to download $asset_url" >&2; return 1; }
+        mkdir -p "$work/extracted"
+        tar -xf "$downloaded" -C "$work/extracted" || { echo "skip: $name: failed to extract $asset" >&2; return 1; }
+        resolved_bin="$work/extracted/$bin_path"
+    else
+        # direct binary asset — the download itself is the binary
+        resolved_bin="$work/$asset"
+        curl -fsSL -o "$resolved_bin" "$asset_url" || { echo "skip: $name: failed to download $asset_url" >&2; return 1; }
+    fi
+    [ -f "$resolved_bin" ] || { echo "skip: $name: expected binary not found at $resolved_bin" >&2; return 1; }
+    chmod +x "$resolved_bin"
 
     local dist entry_json
     dist="$work/dist"
-    entry_json=$("$SCRIPT_DIR/package.sh" "$bin_path" "$name" "$latest_version" \
+    entry_json=$("$SCRIPT_DIR/package.sh" "$resolved_bin" "$name" "$latest_version" \
         --bin-name "$bin" \
         ${platform:+--platform "$platform"} \
         ${description:+--description "$description"} \
