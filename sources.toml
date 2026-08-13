@@ -42,15 +42,6 @@ description = "Command-line JSON processor (Linux x86_64 static binary)"
 version_prefix = "jq-"
 
 [[package]]
-name = "jq-macos-arm64"
-repo = "jqlang/jq"
-asset = "jq-macos-arm64"
-bin = "jq"
-platform = "macos-arm64"
-description = "Command-line JSON processor (macOS arm64 binary)"
-version_prefix = "jq-"
-
-[[package]]
 name = "fastfetch"
 repo = "fastfetch-cli/fastfetch"
 asset = "fastfetch-linux-amd64.tar.gz"
