@@ -26,6 +26,11 @@
 #                           package, push, or open anything.
 #   -s, --sources FILE     Sources file (default: sources.toml).
 #   -i, --index FILE       Index file to update (default: stable.json).
+#   -f, --force NAME       Repackage NAME even if its upstream version
+#                           isn't newer than what's indexed — for when
+#                           packaging logic itself changed (e.g. package.sh
+#                           learning to bundle shared libraries), not the
+#                           upstream release.
 #   -h, --help             Show this help.
 #
 # Requires: curl, jq, tar, zstd, git, gh (authenticated), awk. A
@@ -51,12 +56,14 @@ err() {
 DRY_RUN=0
 SOURCES_FILE="sources.toml"
 INDEX_FILE="stable.json"
+FORCE_NAME=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         -n|--dry-run)  DRY_RUN=1; shift ;;
         -s|--sources)  SOURCES_FILE=$2; shift 2 ;;
         -i|--index)    INDEX_FILE=$2; shift 2 ;;
+        -f|--force)    FORCE_NAME=$2; shift 2 ;;
         -h|--help)     usage; exit 0 ;;
         *) usage; err "unknown argument: $1" ;;
     esac
@@ -163,7 +170,7 @@ process_package() {
     local current_version
     current_version=$(jq -r --arg n "$name" '.packages[]? | select(.name==$n) | .version // empty' "$INDEX_FILE")
 
-    if [ -n "$current_version" ]; then
+    if [ -n "$current_version" ] && [ "$name" != "$FORCE_NAME" ]; then
         if [ "$current_version" = "$latest_version" ]; then
             echo "up to date: $name $current_version" >&2
             return 0
@@ -174,6 +181,8 @@ process_package() {
             echo "skip: $name: upstream latest ($latest_version) is not newer than indexed ($current_version)" >&2
             return 0
         fi
+    elif [ "$name" = "$FORCE_NAME" ]; then
+        echo "forced: $name $current_version -> repackaging $latest_version regardless" >&2
     fi
 
     echo "outdated: $name ${current_version:-<not indexed>} -> $latest_version" >&2

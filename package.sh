@@ -103,18 +103,58 @@ mkdir -p "$staging/bin"
 cp "$binary" "$staging/bin/$bin_name"
 chmod +x "$staging/bin/$bin_name"
 
+# Bundle any shared library dependencies beyond the base set every
+# glibc system already has. A binary built on one distro's libraries
+# and installed on another can pull in something (ncurses is the
+# classic case) whose ABI doesn't actually match the target system's
+# own copy, even at the same soname version — fap's "libs" mechanism
+# (bundled .so + wrapper script, see fap.h) exists exactly for this.
+# ldd only exists on Linux, so on macOS this is a no-op with a note —
+# same as it's always effectively been until now.
+lib_names=()
+if command -v ldd >/dev/null 2>&1 && ldd "$staging/bin/$bin_name" >/dev/null 2>&1; then
+    mkdir -p "$staging/lib"
+    while read -r line; do
+        libpath=$(echo "$line" | awk '{ if ($2 == "=>") print $3 }')
+        [ -n "$libpath" ] && [ -f "$libpath" ] || continue
+        libname=$(basename "$libpath")
+        case "$libname" in
+            ld-linux*.so*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libresolv.so.*|libgcc_s.so.*)
+                continue ;;
+        esac
+        cp "$libpath" "$staging/lib/$libname"
+        lib_names+=("$libname")
+    done < <(ldd "$staging/bin/$bin_name" 2>/dev/null)
+    [ "${#lib_names[@]}" -gt 0 ] || rmdir "$staging/lib" 2>/dev/null || true
+elif ! command -v ldd >/dev/null 2>&1; then
+    echo "package.sh: note: ldd not found (expected on macOS) — not checking for shared library dependencies to bundle. If $bin_name is dynamically linked against anything beyond glibc itself, package it on Linux instead so this can be detected." >&2
+fi
+
 tarball="$out_dir/${artifact_base}.tar"
 archive="$out_dir/${artifact_base}.tar.zst"
 
-tar --format ustar -cf "$tarball" -C "$staging" bin/"$bin_name"
+tar_items=(bin/"$bin_name")
+[ "${#lib_names[@]}" -gt 0 ] && tar_items+=(lib)
+tar --format ustar -cf "$tarball" -C "$staging" "${tar_items[@]}"
 zstd -19 -f -q "$tarball" -o "$archive"
 rm -f "$tarball"
 
 sha=$(sha256 "$archive")
 url="https://github.com/${repo}/releases/download/${tag}/${artifact_base}.tar.zst"
 
+libs_field=""
+if [ "${#lib_names[@]}" -gt 0 ]; then
+    joined=""
+    for l in "${lib_names[@]}"; do
+        if [ -z "$joined" ]; then joined="\"$l\""; else joined="$joined, \"$l\""; fi
+    done
+    libs_field=",
+      \"libs\": [$joined]"
+fi
+
 echo "Package:     $name $version" >&2
 echo "Bin:         $bin_name" >&2
+[ "${#lib_names[@]}" -gt 0 ] && echo "Libs:        ${lib_names[*]}" >&2
 echo "Artifact:    $archive" >&2
 echo "SHA256:      $sha" >&2
 echo "Release tag: $tag" >&2
@@ -131,6 +171,6 @@ cat <<JSON
       "url": "$url",
       "sha256": "$sha",
       "description": "$description",
-      "bin": ["$bin_name"]
+      "bin": ["$bin_name"]$libs_field
     }
 JSON
