@@ -60,3 +60,20 @@ bin_path = "htop"
 bin = "htop"
 platform = "linux-x86_64"
 description = "Interactive process viewer (Linux x86_64, built from source)"
+
+# BtbN/FFmpeg-Builds is a well-known community build repo (upstream
+# FFmpeg itself doesn't publish Linux binaries), and reuses a single
+# rolling "latest" tag for every build rather than real version
+# numbers — doesn't fit update.sh's version-diffing model, so this
+# packages once (recorded version will literally be "latest") and
+# then stays pinned until manually refreshed with
+# `./update.sh --force ffmpeg`, rather than repackaging a ~130MB
+# archive on every scheduled run for a tag that never looks different.
+[[package]]
+name = "ffmpeg"
+repo = "BtbN/FFmpeg-Builds"
+asset = "ffmpeg-master-latest-linux64-gpl.tar.xz"
+bin_path = "ffmpeg-master-latest-linux64-gpl/bin/ffmpeg"
+bin = "ffmpeg"
+platform = "linux-x86_64"
+description = "Complete, cross-platform solution to record, convert, and stream audio and video (Linux x86_64, GPL build)"
