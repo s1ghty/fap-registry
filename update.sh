@@ -6,14 +6,19 @@
 #   1. Fetch the latest release of its upstream "repo" via the GitHub API.
 #   2. Compare that release's version against stable.json's current entry
 #      (missing entries count as outdated, i.e. "add this package").
-#   3. If newer, obtain the binary one of three ways (see sources.toml's
-#      field docs for which fields select which mode):
-#        - direct binary asset: downloaded as-is
-#        - archive asset: downloaded and extracted, binary at "bin_path"
+#   3. If newer, obtain the binary (or, if "tree" is set, the whole app
+#      directory) one of three ways (see sources.toml's field docs for
+#      which fields select which mode):
+#        - direct binary asset: downloaded as-is (not valid with "tree")
+#        - archive asset: downloaded and extracted; "bin_path" is either
+#          the single binary's path inside it, or — with "tree" set — the
+#          entry point's path inside it, with the rest of the extracted
+#          tree preserved and packaged alongside it
 #        - build_from_source: shallow-clone "repo" at the release tag, run
-#          "build_cmd" (installing "build_deps" via apt first), binary at
-#          "bin_path" relative to the clone root — for projects like htop
-#          that don't publish a prebuilt Linux binary at all
+#          "build_cmd" (installing "build_deps" via apt first); "bin_path"
+#          works the same as archive mode, relative to the clone root
+#          instead — for projects like htop that don't publish a prebuilt
+#          Linux binary at all
 #      Then repackage it with package.sh, upload the tarball as a release
 #      asset on this repo, update stable.json on a fresh branch, and open
 #      a PR.
@@ -128,7 +133,7 @@ skipped=0
 process_package() {
     local pkg_json=$1
     local name repo asset bin platform description version_prefix
-    local build_from_source build_deps build_cmd bin_path
+    local build_from_source build_deps build_cmd bin_path tree
     name=$(jq -r '.name // empty' <<<"$pkg_json")
     repo=$(jq -r '.repo // empty' <<<"$pkg_json")
     asset=$(jq -r '.asset // empty' <<<"$pkg_json")
@@ -140,14 +145,24 @@ process_package() {
     build_deps=$(jq -r '.build_deps // empty' <<<"$pkg_json")
     build_cmd=$(jq -r '.build_cmd // empty' <<<"$pkg_json")
     bin_path=$(jq -r '.bin_path // empty' <<<"$pkg_json")
+    tree=$(jq -r '.tree // empty' <<<"$pkg_json")
 
+    # "bin" is only meaningful outside tree mode (package.sh derives the
+    # installed name from bin_path's basename when tree=true — see the
+    # comment above this function's field docs).
     if [ "$build_from_source" = "true" ]; then
-        if [ -z "$name" ] || [ -z "$repo" ] || [ -z "$bin" ] || [ -z "$build_cmd" ] || [ -z "$bin_path" ]; then
-            echo "skip: sources.toml entry missing name/repo/bin/build_cmd/bin_path for a build_from_source package: $pkg_json" >&2
+        if [ -z "$name" ] || [ -z "$repo" ] || [ -z "$build_cmd" ] || [ -z "$bin_path" ] ||
+           { [ "$tree" != "true" ] && [ -z "$bin" ]; }; then
+            echo "skip: sources.toml entry missing name/repo/build_cmd/bin_path (or bin, outside tree mode) for a build_from_source package: $pkg_json" >&2
             return 1
         fi
-    elif [ -z "$name" ] || [ -z "$repo" ] || [ -z "$asset" ] || [ -z "$bin" ]; then
-        echo "skip: sources.toml entry missing name/repo/asset/bin: $pkg_json" >&2
+    elif [ -z "$name" ] || [ -z "$repo" ] || [ -z "$asset" ] ||
+         { [ "$tree" != "true" ] && [ -z "$bin" ]; }; then
+        echo "skip: sources.toml entry missing name/repo/asset (or bin, outside tree mode): $pkg_json" >&2
+        return 1
+    fi
+    if [ "$tree" = "true" ] && [ -z "$bin_path" ]; then
+        echo "skip: sources.toml entry has tree=true but no bin_path (entry point within the tree): $pkg_json" >&2
         return 1
     fi
 
@@ -197,10 +212,12 @@ process_package() {
     fi
 
     if [ "$DRY_RUN" = "1" ]; then
+        local mode_note=""
+        [ "$tree" = "true" ] && mode_note=" (whole tree, entry point $bin_path)"
         if [ "$build_from_source" = "true" ]; then
-            echo "dry-run: would clone $repo@$tag_name, run '$build_cmd', and open a PR updating $name to $latest_version" >&2
+            echo "dry-run: would clone $repo@$tag_name, run '$build_cmd', and open a PR updating $name to $latest_version$mode_note" >&2
         else
-            echo "dry-run: would download $asset_url and open a PR updating $name to $latest_version" >&2
+            echo "dry-run: would download $asset_url and open a PR updating $name to $latest_version$mode_note" >&2
         fi
         return 0
     fi
@@ -211,9 +228,11 @@ process_package() {
         return 0
     fi
 
-    local work resolved_bin
+    local work resolved_bin tree_root
     work=$(mktemp -d)
     trap 'rm -rf "$work"' RETURN
+    resolved_bin=""
+    tree_root=""
 
     if [ "$build_from_source" = "true" ]; then
         if [ -n "$build_deps" ]; then
@@ -227,29 +246,48 @@ process_package() {
             echo "skip: $name: build command failed" >&2
             return 1
         fi
-        resolved_bin="$work/src/$bin_path"
+        if [ "$tree" = "true" ]; then
+            tree_root="$work/src"
+        else
+            resolved_bin="$work/src/$bin_path"
+        fi
     elif [ -n "$bin_path" ]; then
-        # archive asset: download, extract, the binary is at bin_path inside it
+        # archive asset: download, extract — bin_path is either the one
+        # binary to package (non-tree), or the entry point within the
+        # whole tree to preserve (tree=true)
         local downloaded="$work/$asset"
         curl -fsSL -o "$downloaded" "$asset_url" || { echo "skip: $name: failed to download $asset_url" >&2; return 1; }
         mkdir -p "$work/extracted"
         tar -xf "$downloaded" -C "$work/extracted" || { echo "skip: $name: failed to extract $asset" >&2; return 1; }
-        resolved_bin="$work/extracted/$bin_path"
+        if [ "$tree" = "true" ]; then
+            tree_root="$work/extracted"
+        else
+            resolved_bin="$work/extracted/$bin_path"
+        fi
     else
         # direct binary asset — the download itself is the binary
         resolved_bin="$work/$asset"
         curl -fsSL -o "$resolved_bin" "$asset_url" || { echo "skip: $name: failed to download $asset_url" >&2; return 1; }
     fi
-    [ -f "$resolved_bin" ] || { echo "skip: $name: expected binary not found at $resolved_bin" >&2; return 1; }
-    chmod +x "$resolved_bin"
 
     local dist entry_json
     dist="$work/dist"
-    entry_json=$("$SCRIPT_DIR/package.sh" "$resolved_bin" "$name" "$latest_version" \
-        --bin-name "$bin" \
-        ${platform:+--platform "$platform"} \
-        ${description:+--description "$description"} \
-        --out "$dist") || { echo "skip: $name: package.sh failed" >&2; return 1; }
+    if [ -n "$tree_root" ]; then
+        [ -f "$tree_root/$bin_path" ] || { echo "skip: $name: expected entry point not found at $tree_root/$bin_path" >&2; return 1; }
+        entry_json=$("$SCRIPT_DIR/package.sh" --tree "$tree_root" "$name" "$latest_version" \
+            --entry "$bin_path" \
+            ${platform:+--platform "$platform"} \
+            ${description:+--description "$description"} \
+            --out "$dist") || { echo "skip: $name: package.sh failed" >&2; return 1; }
+    else
+        [ -f "$resolved_bin" ] || { echo "skip: $name: expected binary not found at $resolved_bin" >&2; return 1; }
+        chmod +x "$resolved_bin"
+        entry_json=$("$SCRIPT_DIR/package.sh" "$resolved_bin" "$name" "$latest_version" \
+            --bin-name "$bin" \
+            ${platform:+--platform "$platform"} \
+            ${description:+--description "$description"} \
+            --out "$dist") || { echo "skip: $name: package.sh failed" >&2; return 1; }
+    fi
 
     local archives=("$dist"/*.tar.zst)
     local archive="${archives[0]}"

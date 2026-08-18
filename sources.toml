@@ -31,6 +31,16 @@
 #      apt first, if set), and expects the resulting binary at "bin_path"
 #      relative to the clone root. For projects like htop that don't
 #      publish a prebuilt Linux binary at all.
+#
+# Set "tree" = "true" (combinable with mode 2 or 3 above) for an app that
+# ships a resource directory alongside its binary — neovim's
+# share/nvim/runtime/, Firefox's bundled locale/plugin files — not just a
+# self-contained single binary. The whole extracted archive (or built
+# source tree) is preserved as-is instead of packaging just one file;
+# "bin_path" becomes the entry point's path within that tree rather than
+# the one binary to extract. "bin" is unused in this mode (the installed
+# command name is always the basename of "bin_path" — see
+# install.c's resolve_pkg_entry()).
 
 [[package]]
 name = "jq"
@@ -77,3 +87,17 @@ bin_path = "ffmpeg-master-latest-linux64-gpl/bin/ffmpeg"
 bin = "ffmpeg"
 platform = "linux-x86_64"
 description = "Complete, cross-platform solution to record, convert, and stream audio and video (Linux x86_64, GPL build)"
+
+# First tree-mode package: neovim's release ships bin/nvim alongside a
+# share/nvim/runtime/ directory (colorschemes, syntax files, filetype
+# detection, ...) that the binary needs at a fixed relative path to
+# itself, not just a self-contained executable.
+[[package]]
+name = "neovim"
+repo = "neovim/neovim"
+asset = "nvim-linux-x86_64.tar.gz"
+tree = "true"
+bin_path = "nvim-linux-x86_64/bin/nvim"
+platform = "linux-x86_64"
+description = "Hyperextensible Vim-based text editor"
+version_prefix = "v"
