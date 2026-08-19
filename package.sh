@@ -183,6 +183,7 @@ fi
 lib_names=()
 if command -v ldd >/dev/null 2>&1 && ldd "$entry_path" >/dev/null 2>&1; then
     mkdir -p "$staging/lib"
+    staging_real=$(cd "$staging" && pwd -P)
     while read -r line; do
         libpath=$(echo "$line" | awk '{ if ($2 == "=>") print $3 }')
         [ -n "$libpath" ] && [ -f "$libpath" ] || continue
@@ -190,6 +191,14 @@ if command -v ldd >/dev/null 2>&1 && ldd "$entry_path" >/dev/null 2>&1; then
         case "$libname" in
             ld-linux*.so*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libresolv.so.*|libgcc_s.so.*)
                 continue ;;
+        esac
+        # Already self-satisfied via the package's own directory (e.g. a
+        # --tree package that bundles its own libs, resolved via $ORIGIN
+        # rather than a system path) — copying it again into lib/ would
+        # just duplicate data already present, for zero benefit.
+        libdir_real=$(cd "$(dirname "$libpath")" && pwd -P)
+        case "$libdir_real" in
+            "$staging_real"|"$staging_real"/*) continue ;;
         esac
         cp "$libpath" "$staging/lib/$libname"
         lib_names+=("$libname")

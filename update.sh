@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
 # update.sh — check sources.toml against stable.json and open a PR for
-# each package whose upstream GitHub release is newer than what's indexed.
+# each package whose upstream release is newer than what's indexed.
 #
 # For each [[package]] in sources.toml:
-#   1. Fetch the latest release of its upstream "repo" via the GitHub API.
-#   2. Compare that release's version against stable.json's current entry
-#      (missing entries count as outdated, i.e. "add this package").
+#   1. Determine the latest version, one of two ways depending on which
+#      source fields are set:
+#        - "repo" (owner/repo): fetch its latest release via the GitHub
+#          releases API.
+#        - "version_url": fetch that URL and read the version from its
+#          response body (the whole trimmed body, or a field extracted
+#          via "version_jq" if set) — for anything not hosted on GitHub,
+#          e.g. Mozilla's product-details API for Firefox. The download
+#          URL itself comes from "url_template", a URL containing the
+#          literal text "{version}", substituted with whatever version
+#          was just determined.
+#      Exactly one of "repo" / "version_url" must be set.
+#   2. Compare that version against stable.json's current entry (missing
+#      entries count as outdated, i.e. "add this package").
 #   3. If newer, obtain the binary (or, if "tree" is set, the whole app
 #      directory) one of three ways (see sources.toml's field docs for
 #      which fields select which mode):
@@ -18,7 +29,8 @@
 #          "build_cmd" (installing "build_deps" via apt first); "bin_path"
 #          works the same as archive mode, relative to the clone root
 #          instead — for projects like htop that don't publish a prebuilt
-#          Linux binary at all
+#          Linux binary at all. Only supported with "repo" (a GitHub
+#          checkout) — not yet with "version_url".
 #      Then repackage it with package.sh, upload the tarball as a release
 #      asset on this repo, update stable.json on a fresh branch, and open
 #      a PR.
@@ -134,6 +146,7 @@ process_package() {
     local pkg_json=$1
     local name repo asset bin platform description version_prefix
     local build_from_source build_deps build_cmd bin_path tree
+    local version_url version_jq url_template
     name=$(jq -r '.name // empty' <<<"$pkg_json")
     repo=$(jq -r '.repo // empty' <<<"$pkg_json")
     asset=$(jq -r '.asset // empty' <<<"$pkg_json")
@@ -146,41 +159,97 @@ process_package() {
     build_cmd=$(jq -r '.build_cmd // empty' <<<"$pkg_json")
     bin_path=$(jq -r '.bin_path // empty' <<<"$pkg_json")
     tree=$(jq -r '.tree // empty' <<<"$pkg_json")
+    version_url=$(jq -r '.version_url // empty' <<<"$pkg_json")
+    version_jq=$(jq -r '.version_jq // empty' <<<"$pkg_json")
+    url_template=$(jq -r '.url_template // empty' <<<"$pkg_json")
 
+    [ -n "$name" ] || { echo "skip: sources.toml entry missing name: $pkg_json" >&2; return 1; }
+
+    # Which upstream source: "repo" (GitHub releases API) or
+    # "version_url" (fetch a URL, read the version out of it, build the
+    # download URL from a template) — exactly one, not both, not neither.
+    local source_mode
+    if [ -n "$repo" ] && [ -n "$version_url" ]; then
+        echo "skip: $name: sets both repo and version_url — pick one source" >&2
+        return 1
+    elif [ -n "$repo" ]; then
+        source_mode="github"
+    elif [ -n "$version_url" ]; then
+        source_mode="url"
+        if [ -z "$url_template" ]; then
+            echo "skip: $name: version_url set but no url_template (how to build the download URL from a version)" >&2
+            return 1
+        fi
+        if [ "$build_from_source" = "true" ]; then
+            echo "skip: $name: build_from_source isn't supported with version_url yet — only GitHub-hosted (repo) cloning is" >&2
+            return 1
+        fi
+    else
+        echo "skip: $name: needs either repo (GitHub) or version_url (arbitrary URL): $pkg_json" >&2
+        return 1
+    fi
+
+    if [ "$build_from_source" = "true" ]; then
+        if [ -z "$build_cmd" ] || [ -z "$bin_path" ]; then
+            echo "skip: $name: build_from_source package missing build_cmd/bin_path: $pkg_json" >&2
+            return 1
+        fi
+    elif [ "$source_mode" = "github" ] && [ -z "$asset" ]; then
+        echo "skip: $name: GitHub-hosted package missing asset: $pkg_json" >&2
+        return 1
+    fi
     # "bin" is only meaningful outside tree mode (package.sh derives the
     # installed name from bin_path's basename when tree=true — see the
     # comment above this function's field docs).
-    if [ "$build_from_source" = "true" ]; then
-        if [ -z "$name" ] || [ -z "$repo" ] || [ -z "$build_cmd" ] || [ -z "$bin_path" ] ||
-           { [ "$tree" != "true" ] && [ -z "$bin" ]; }; then
-            echo "skip: sources.toml entry missing name/repo/build_cmd/bin_path (or bin, outside tree mode) for a build_from_source package: $pkg_json" >&2
-            return 1
-        fi
-    elif [ -z "$name" ] || [ -z "$repo" ] || [ -z "$asset" ] ||
-         { [ "$tree" != "true" ] && [ -z "$bin" ]; }; then
-        echo "skip: sources.toml entry missing name/repo/asset (or bin, outside tree mode): $pkg_json" >&2
+    if [ "$tree" != "true" ] && [ -z "$bin" ]; then
+        echo "skip: $name: missing bin (or set tree=true, which derives it from bin_path): $pkg_json" >&2
         return 1
     fi
     if [ "$tree" = "true" ] && [ -z "$bin_path" ]; then
-        echo "skip: sources.toml entry has tree=true but no bin_path (entry point within the tree): $pkg_json" >&2
+        echo "skip: $name: has tree=true but no bin_path (entry point within the tree): $pkg_json" >&2
         return 1
     fi
 
-    echo "== $name (upstream $repo) ==" >&2
+    echo "== $name (upstream ${repo:-$version_url}) ==" >&2
 
     local auth=()
     [ -n "$gh_token" ] && auth=(-H "Authorization: Bearer $gh_token")
 
-    local release_json
-    if ! release_json=$(curl -fsSL "${auth[@]}" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$repo/releases/latest"); then
-        echo "skip: $name: failed to fetch latest release for $repo" >&2
-        return 1
+    local release_json="" tag_name="" latest_version
+    if [ "$source_mode" = "github" ]; then
+        if ! release_json=$(curl -fsSL "${auth[@]}" -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$repo/releases/latest"); then
+            echo "skip: $name: failed to fetch latest release for $repo" >&2
+            return 1
+        fi
+        tag_name=$(jq -r '.tag_name' <<<"$release_json")
+        latest_version=${tag_name#"$version_prefix"}
+    else
+        local version_resp
+        if ! version_resp=$(curl -fsSL "$version_url"); then
+            echo "skip: $name: failed to fetch $version_url" >&2
+            return 1
+        fi
+        if [ -n "$version_jq" ]; then
+            latest_version=$(jq -r "$version_jq" <<<"$version_resp" 2>/dev/null || true)
+        else
+            latest_version=$(printf '%s' "$version_resp" | tr -d '[:space:]')
+        fi
+        if [ -z "$latest_version" ] || [ "$latest_version" = "null" ]; then
+            echo "skip: $name: could not extract a version from $version_url${version_jq:+ (via version_jq \"$version_jq\")}" >&2
+            return 1
+        fi
+        latest_version=${latest_version#"$version_prefix"}
     fi
 
-    local tag_name latest_version
-    tag_name=$(jq -r '.tag_name' <<<"$release_json")
-    latest_version=${tag_name#"$version_prefix"}
+    local source_desc source_link_md
+    if [ "$source_mode" = "github" ]; then
+        source_desc="${repo}@${tag_name}"
+        source_link_md="[$repo@$tag_name](https://github.com/$repo/releases/tag/$tag_name)"
+    else
+        source_desc="$version_url"
+        source_link_md="[$version_url]($version_url)"
+    fi
 
     local current_version
     current_version=$(jq -r --arg n "$name" '.packages[]? | select(.name==$n) | .version // empty' "$INDEX_FILE")
@@ -204,10 +273,14 @@ process_package() {
 
     local asset_url=""
     if [ "$build_from_source" != "true" ]; then
-        asset_url=$(jq -r --arg a "$asset" '.assets[] | select(.name==$a) | .browser_download_url' <<<"$release_json")
-        if [ -z "$asset_url" ]; then
-            echo "skip: $name: release $tag_name has no asset named $asset" >&2
-            return 1
+        if [ "$source_mode" = "github" ]; then
+            asset_url=$(jq -r --arg a "$asset" '.assets[] | select(.name==$a) | .browser_download_url' <<<"$release_json")
+            if [ -z "$asset_url" ]; then
+                echo "skip: $name: release $tag_name has no asset named $asset" >&2
+                return 1
+            fi
+        else
+            asset_url=${url_template//\{version\}/$latest_version}
         fi
     fi
 
@@ -254,11 +327,15 @@ process_package() {
     elif [ -n "$bin_path" ]; then
         # archive asset: download, extract — bin_path is either the one
         # binary to package (non-tree), or the entry point within the
-        # whole tree to preserve (tree=true)
-        local downloaded="$work/$asset"
+        # whole tree to preserve (tree=true). $asset names the local temp
+        # file for a GitHub release asset; url-mode has no "asset" (there's
+        # no release-assets list to pick a filename from — the URL itself
+        # is the one and only download), so fall back to its basename.
+        local asset_filename="${asset:-$(basename "$asset_url")}"
+        local downloaded="$work/$asset_filename"
         curl -fsSL -o "$downloaded" "$asset_url" || { echo "skip: $name: failed to download $asset_url" >&2; return 1; }
         mkdir -p "$work/extracted"
-        tar -xf "$downloaded" -C "$work/extracted" || { echo "skip: $name: failed to extract $asset" >&2; return 1; }
+        tar -xf "$downloaded" -C "$work/extracted" || { echo "skip: $name: failed to extract $asset_filename" >&2; return 1; }
         if [ "$tree" = "true" ]; then
             tree_root="$work/extracted"
         else
@@ -266,7 +343,7 @@ process_package() {
         fi
     else
         # direct binary asset — the download itself is the binary
-        resolved_bin="$work/$asset"
+        resolved_bin="$work/${asset:-$(basename "$asset_url")}"
         curl -fsSL -o "$resolved_bin" "$asset_url" || { echo "skip: $name: failed to download $asset_url" >&2; return 1; }
     fi
 
@@ -318,13 +395,13 @@ process_package() {
     else
         gh release create "$tag" "$archive" --repo "$repo_slug" \
             --title "$name $latest_version${platform:+ ($platform)}" \
-            --notes "Automated update via update.sh from ${repo}@${tag_name}."
+            --notes "Automated update via update.sh from ${source_desc}."
     fi || { echo "skip: $name: gh release create/upload failed" >&2; return 1; }
 
     git push -q -u origin "$branch" || { echo "skip: $name: git push failed" >&2; return 1; }
     gh pr create --repo "$repo_slug" --base main --head "$branch" \
         --title "Update $name to $latest_version" \
-        --body "Automated update: \`$name\` ${current_version:-<not indexed>} -> $latest_version, built from [$repo@$tag_name](https://github.com/$repo/releases/tag/$tag_name)." \
+        --body "Automated update: \`$name\` ${current_version:-<not indexed>} -> $latest_version, built from ${source_link_md}." \
         || { echo "skip: $name: gh pr create failed" >&2; return 1; }
 
     updated=$((updated + 1))

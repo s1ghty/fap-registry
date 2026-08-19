@@ -1,20 +1,44 @@
-# sources.toml — upstream GitHub releases tracked by update.sh.
+# sources.toml — upstream releases tracked by update.sh.
 #
-# Each [[package]] row maps one stable.json entry to the upstream GitHub
-# repo/release it's built from, so update.sh can check for a newer release
-# and repackage it automatically. If a row's "name" isn't in stable.json
-# yet, update.sh adds it as a new package.
+# Each [[package]] row maps one stable.json entry to the upstream repo or
+# URL it's built from, so update.sh can check for a newer release and
+# repackage it automatically. If a row's "name" isn't in stable.json yet,
+# update.sh adds it as a new package.
 #
 # Fields:
 #   name             stable.json package name (must match exactly)
-#   repo             upstream "owner/repo" on GitHub
+#   repo             upstream "owner/repo" on GitHub (see "Where the
+#                    upstream lives" below for the alternative)
 #   bin              binary name inside the package's bin/ directory
 #   platform         platform suffix used in the artifact filename/tag (optional)
 #   description      stable.json description field (optional)
-#   version_prefix   prefix stripped from the release tag to get the version
-#                    (optional, e.g. tag "jq-1.8.2" with version_prefix "jq-" -> "1.8.2")
+#   version_prefix   prefix stripped from the release tag/version to get
+#                    the recorded version (optional, e.g. tag "jq-1.8.2"
+#                    with version_prefix "jq-" -> "1.8.2"; also applies to
+#                    a version_url-sourced version, e.g. neovim-style tag
+#                    "v0.12.4" with version_prefix "v" -> "0.12.4")
 #
-# How the binary is obtained — three modes:
+# Where the upstream lives — exactly one of these two:
+#
+#   1. GitHub releases (most packages). Set "repo" to "owner/repo";
+#      update.sh checks its latest release via the GitHub API.
+#
+#   2. Anywhere else. Set "version_url" to a URL whose response tells you
+#      the latest version — either the whole trimmed response body (if
+#      it's already just a bare version string), or a JSON field
+#      extracted via "version_jq" (a jq filter, e.g. ".some.field"). Set
+#      "url_template" to the actual download URL, containing the literal
+#      text "{version}" wherever the version number goes — update.sh
+#      substitutes it in after determining the version. This is Firefox's
+#      shape below: Mozilla doesn't publish on GitHub at all, so its
+#      version comes from Mozilla's own product-details JSON API, and the
+#      download URL is built from a template instead of picked out of a
+#      release's asset list (there's no such list off GitHub — the
+#      constructed URL is the one and only download).
+#      Not yet combinable with build_from_source (see below) — only a
+#      GitHub checkout can be built from source right now.
+#
+# How the binary is obtained once you know where it lives — three modes:
 #
 #   1. Direct binary asset (default). Set "asset" to a release asset
 #      filename that IS the binary itself, downloaded as-is. This is jq's
@@ -101,3 +125,21 @@ bin_path = "nvim-linux-x86_64/bin/nvim"
 platform = "linux-x86_64"
 description = "Hyperextensible Vim-based text editor"
 version_prefix = "v"
+
+# First version_url package: Mozilla doesn't host Firefox on GitHub at
+# all, so there's no releases API to check. LATEST_FIREFOX_VERSION comes
+# from Mozilla's own product-details endpoint (a clean "154.0"-style
+# string, no prefix needed); url_template builds the real download URL
+# from it. Also tree-mode: Firefox's own tarball has no bin/ subdirectory
+# at all — "firefox" sits flat inside "firefox/" alongside omni.ja,
+# libxul.so, and everything else it needs, all resolved relative to the
+# binary's own location the same way neovim's runtime dir is.
+[[package]]
+name = "firefox"
+version_url = "https://product-details.mozilla.org/1.0/firefox_versions.json"
+version_jq = ".LATEST_FIREFOX_VERSION"
+url_template = "https://download-installer.cdn.mozilla.net/pub/firefox/releases/{version}/linux-x86_64/en-US/firefox-{version}.tar.xz"
+tree = "true"
+bin_path = "firefox/firefox"
+platform = "linux-x86_64"
+description = "Fast, private, and safe web browser"
