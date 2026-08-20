@@ -14,7 +14,13 @@
 #          URL itself comes from "url_template", a URL containing the
 #          literal text "{version}", substituted with whatever version
 #          was just determined.
-#      Exactly one of "repo" / "version_url" must be set.
+#      Exactly one of "repo" / "version_url" must be set. A GitHub
+#      build_from_source package can set "pin_tag" to check out a specific
+#      tag instead of whatever's actually latest — e.g. a newer release
+#      needs a dependency version the CI runner can't satisfy (see
+#      sway's sources.toml entry). A pinned package's own version never
+#      changes on its own; update.sh just reports it "up to date" forever
+#      unless sources.toml's pin_tag itself is edited.
 #   2. Compare that version against stable.json's current entry (missing
 #      entries count as outdated, i.e. "add this package").
 #   3. If newer, obtain the binary (or, if "tree" is set, the whole app
@@ -146,7 +152,7 @@ process_package() {
     local pkg_json=$1
     local name repo asset bin platform description version_prefix
     local build_from_source build_deps build_cmd bin_path tree
-    local version_url version_jq url_template
+    local version_url version_jq url_template pin_tag
     name=$(jq -r '.name // empty' <<<"$pkg_json")
     repo=$(jq -r '.repo // empty' <<<"$pkg_json")
     asset=$(jq -r '.asset // empty' <<<"$pkg_json")
@@ -162,6 +168,7 @@ process_package() {
     version_url=$(jq -r '.version_url // empty' <<<"$pkg_json")
     version_jq=$(jq -r '.version_jq // empty' <<<"$pkg_json")
     url_template=$(jq -r '.url_template // empty' <<<"$pkg_json")
+    pin_tag=$(jq -r '.pin_tag // empty' <<<"$pkg_json")
 
     [ -n "$name" ] || { echo "skip: sources.toml entry missing name: $pkg_json" >&2; return 1; }
 
@@ -189,6 +196,10 @@ process_package() {
         return 1
     fi
 
+    if [ -n "$pin_tag" ] && [ "$build_from_source" != "true" ]; then
+        echo "skip: $name: pin_tag only makes sense with build_from_source (a non-source release needs the real release's asset list, which a pinned tag skips fetching)" >&2
+        return 1
+    fi
     if [ "$build_from_source" = "true" ]; then
         if [ -z "$build_cmd" ] || [ -z "$bin_path" ]; then
             echo "skip: $name: build_from_source package missing build_cmd/bin_path: $pkg_json" >&2
@@ -216,7 +227,17 @@ process_package() {
     [ -n "$gh_token" ] && auth=(-H "Authorization: Bearer $gh_token")
 
     local release_json="" tag_name="" latest_version
-    if [ "$source_mode" = "github" ]; then
+    if [ "$source_mode" = "github" ] && [ -n "$pin_tag" ]; then
+        # Pinned to a specific tag instead of whatever's actually latest
+        # upstream — e.g. a newer release needs a dependency version this
+        # CI runner can't satisfy (see sway's sources.toml comment).
+        # release_json stays empty: pinned packages are only meaningful
+        # for build_from_source (no release-assets list needed), and
+        # that's enforced below by the same validation asset-mode
+        # packages already go through.
+        tag_name="$pin_tag"
+        latest_version=${tag_name#"$version_prefix"}
+    elif [ "$source_mode" = "github" ]; then
         if ! release_json=$(curl -fsSL "${auth[@]}" -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/$repo/releases/latest"); then
             echo "skip: $name: failed to fetch latest release for $repo" >&2

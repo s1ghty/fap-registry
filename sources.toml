@@ -21,7 +21,12 @@
 # Where the upstream lives — exactly one of these two:
 #
 #   1. GitHub releases (most packages). Set "repo" to "owner/repo";
-#      update.sh checks its latest release via the GitHub API.
+#      update.sh checks its latest release via the GitHub API. Combine
+#      with "pin_tag" (a real git tag) to build_from_source that exact
+#      tag instead of whatever's actually latest — for when a newer
+#      release needs a dependency version this CI runner can't satisfy
+#      (see sway below). Only ever repackaged again if pin_tag itself
+#      changes; not valid without build_from_source = "true".
 #
 #   2. Anywhere else. Set "version_url" to a URL whose response tells you
 #      the latest version — either the whole trimmed response body (if
@@ -143,3 +148,25 @@ tree = "true"
 bin_path = "firefox/firefox"
 platform = "linux-x86_64"
 description = "Fast, private, and safe web browser"
+
+# First WM/compositor, and first use of pin_tag: sway's actual latest
+# release (1.12) needs wlroots >=0.20.0, but Ubuntu 24.04 (the CI
+# runner) only has wlroots 0.17.1 available via apt, with no vendored
+# fallback in sway's own repo — that build would fail outright at
+# `meson setup`. sway 1.9 requires wlroots >=0.17.0,<0.18.0, an exact
+# match for what's actually installable here, so this is pinned to 1.9
+# specifically for CI-buildability, not upstream freshness (checked
+# meson.build's wlroots_version constraint directly for both tags
+# before picking one, not guessed). Launch directly from a TTY — no
+# display manager or X11 needed, sway is a Wayland compositor.
+[[package]]
+name = "sway"
+repo = "swaywm/sway"
+pin_tag = "1.9"
+build_from_source = "true"
+build_deps = "meson ninja-build pkg-config libwlroots-dev libwayland-dev wayland-protocols libxkbcommon-dev libjson-c-dev libpcre2-dev libcairo2-dev libpango1.0-dev libpixman-1-dev libevdev-dev libdrm-dev libinput-dev libudev-dev libxcb1-dev libxcb-icccm4-dev libsystemd-dev libgdk-pixbuf-2.0-dev scdoc"
+build_cmd = "meson setup build && ninja -C build"
+bin_path = "build/sway"
+bin = "sway"
+platform = "linux-x86_64"
+description = "i3-compatible tiling Wayland compositor (built from source, pinned to 1.9 for wlroots compatibility)"
