@@ -153,6 +153,7 @@ process_package() {
     local name repo asset bin platform description version_prefix
     local build_from_source build_deps build_cmd bin_path tree
     local version_url version_jq url_template pin_tag
+    local desktop_type desktop_name
     name=$(jq -r '.name // empty' <<<"$pkg_json")
     repo=$(jq -r '.repo // empty' <<<"$pkg_json")
     asset=$(jq -r '.asset // empty' <<<"$pkg_json")
@@ -169,6 +170,8 @@ process_package() {
     version_jq=$(jq -r '.version_jq // empty' <<<"$pkg_json")
     url_template=$(jq -r '.url_template // empty' <<<"$pkg_json")
     pin_tag=$(jq -r '.pin_tag // empty' <<<"$pkg_json")
+    desktop_type=$(jq -r '.desktop_type // empty' <<<"$pkg_json")
+    desktop_name=$(jq -r '.desktop_name // empty' <<<"$pkg_json")
 
     [ -n "$name" ] || { echo "skip: sources.toml entry missing name: $pkg_json" >&2; return 1; }
 
@@ -376,6 +379,8 @@ process_package() {
             --entry "$bin_path" \
             ${platform:+--platform "$platform"} \
             ${description:+--description "$description"} \
+            ${desktop_type:+--desktop-type "$desktop_type"} \
+            ${desktop_name:+--desktop-name "$desktop_name"} \
             --out "$dist") || { echo "skip: $name: package.sh failed" >&2; return 1; }
     else
         [ -f "$resolved_bin" ] || { echo "skip: $name: expected binary not found at $resolved_bin" >&2; return 1; }
@@ -384,6 +389,8 @@ process_package() {
             --bin-name "$bin" \
             ${platform:+--platform "$platform"} \
             ${description:+--description "$description"} \
+            ${desktop_type:+--desktop-type "$desktop_type"} \
+            ${desktop_name:+--desktop-name "$desktop_name"} \
             --out "$dist") || { echo "skip: $name: package.sh failed" >&2; return 1; }
     fi
 

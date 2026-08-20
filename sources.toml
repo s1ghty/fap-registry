@@ -17,6 +17,16 @@
 #                    with version_prefix "jq-" -> "1.8.2"; also applies to
 #                    a version_url-sourced version, e.g. neovim-style tag
 #                    "v0.12.4" with version_prefix "v" -> "0.12.4")
+#   desktop_type     register an XDG .desktop entry at install time:
+#                    "application" (app launcher/menu visibility, e.g.
+#                    fuzzel/rofi finding it), "x11-session", or
+#                    "wayland-session" (selectable at a display manager's
+#                    login screen — system-mode installs only). Optional;
+#                    most packages set none (plain binary, no desktop
+#                    entry at all).
+#   desktop_name     display name for the desktop entry (optional,
+#                    defaults to "name" if desktop_type is set but this
+#                    isn't)
 #
 # Where the upstream lives — exactly one of these two:
 #
@@ -148,6 +158,8 @@ tree = "true"
 bin_path = "firefox/firefox"
 platform = "linux-x86_64"
 description = "Fast, private, and safe web browser"
+desktop_type = "application"
+desktop_name = "Firefox"
 
 # First WM/compositor, and first use of pin_tag: sway's actual latest
 # release (1.12) needs wlroots >=0.20.0, but Ubuntu 24.04 (the CI
@@ -170,3 +182,5 @@ bin_path = "build/sway/sway"
 bin = "sway"
 platform = "linux-x86_64"
 description = "i3-compatible tiling Wayland compositor (built from source, pinned to 1.9 for wlroots compatibility)"
+desktop_type = "wayland-session"
+desktop_name = "Sway"

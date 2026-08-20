@@ -41,6 +41,15 @@
 #   -p, --platform TAG     Platform suffix, e.g. macos-arm64, linux-x86_64.
 #                         Appended to the artifact filename and release tag.
 #   -d, --description STR Description field for the index entry.
+#   --desktop-type TYPE    Register an XDG .desktop entry at install time:
+#                         "application" (app launcher/menu visibility),
+#                         "x11-session", or "wayland-session" (selectable
+#                         at a display manager's login screen — system-mode
+#                         installs only). Omit for a plain package with no
+#                         desktop entry (the default, and by far the most
+#                         common case).
+#   --desktop-name NAME    Display name for the desktop entry (default:
+#                         <name>). Only meaningful with --desktop-type.
 #   -r, --repo OWNER/REPO GitHub repo the asset will be hosted on
 #                         (default: parsed from `git remote get-url origin`).
 #   -t, --tag TAG          Release tag used in the download URL
@@ -63,7 +72,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '2,55p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,71p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 err() {
@@ -79,6 +88,8 @@ description=""
 repo=""
 tag=""
 out_dir="./dist"
+desktop_type=""
+desktop_name=""
 
 positional=()
 while [ $# -gt 0 ]; do
@@ -91,6 +102,8 @@ while [ $# -gt 0 ]; do
         -r|--repo)        repo=$2; shift 2 ;;
         -t|--tag)         tag=$2; shift 2 ;;
         -o|--out)         out_dir=$2; shift 2 ;;
+        --desktop-type)   desktop_type=$2; shift 2 ;;
+        --desktop-name)   desktop_name=$2; shift 2 ;;
         -h|--help)        usage; exit 0 ;;
         --) shift; while [ $# -gt 0 ]; do positional+=("$1"); shift; done ;;
         -*) err "unknown option: $1" ;;
@@ -111,6 +124,15 @@ else
     name=${positional[1]}
     version=${positional[2]}
     [ -f "$binary" ] || err "no such file: $binary"
+fi
+
+if [ -n "$desktop_type" ]; then
+    case "$desktop_type" in
+        application|x11-session|wayland-session) ;;
+        *) err "--desktop-type must be application, x11-session, or wayland-session (got \"$desktop_type\")" ;;
+    esac
+elif [ -n "$desktop_name" ]; then
+    err "--desktop-name has no effect without --desktop-type"
 fi
 
 command -v tar  >/dev/null || err "tar not found"
@@ -254,9 +276,20 @@ if [ "${#lib_names[@]}" -gt 0 ]; then
       \"libs\": [$joined]"
 fi
 
+desktop_field=""
+if [ -n "$desktop_type" ]; then
+    desktop_field=",
+      \"desktop_type\": \"$desktop_type\""
+    if [ -n "$desktop_name" ]; then
+        desktop_field="$desktop_field,
+      \"desktop_name\": \"$desktop_name\""
+    fi
+fi
+
 echo "Package:     $name $version" >&2
 echo "Bin:         $installed_name" >&2
 [ "${#lib_names[@]}" -gt 0 ] && echo "Libs:        ${lib_names[*]}" >&2
+[ -n "$desktop_type" ] && echo "Desktop:     $desktop_type${desktop_name:+ ($desktop_name)}" >&2
 echo "Artifact:    $archive" >&2
 echo "SHA256:      $sha" >&2
 echo "Release tag: $tag" >&2
@@ -273,6 +306,6 @@ cat <<JSON
       "url": "$url",
       "sha256": "$sha",
       "description": "$description",
-      "bin": ["$bin_field_value"]$libs_field
+      "bin": ["$bin_field_value"]$libs_field$desktop_field
     }
 JSON
