@@ -23,9 +23,9 @@
     },
     {
       "name": "htop",
-      "version": "3.5.2",
-      "url": "https://github.com/s1ghty/fap-registry/releases/download/htop-3.5.2-linux-x86_64/htop-3.5.2-linux-x86_64.tar.zst",
-      "sha256": "21215fe785efa039824f560c338a3b2c4287570e9e2f2c8497d1cc31e72ec6b3",
+      "version": "3.5.3",
+      "url": "https://github.com/s1ghty/fap-registry/releases/download/htop-3.5.3-linux-x86_64/htop-3.5.3-linux-x86_64.tar.zst",
+      "sha256": "01c7dec971e0dd687e86f2eca8566c6ef02510ece924b76b92a1278a91dcda71",
       "description": "Interactive process viewer (Linux x86_64, built from source)",
       "bin": [
         "htop"
