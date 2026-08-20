@@ -53,7 +53,11 @@
 #                           isn't newer than what's indexed — for when
 #                           packaging logic itself changed (e.g. package.sh
 #                           learning to bundle shared libraries), not the
-#                           upstream release.
+#                           upstream release. Gets its own disambiguated
+#                           release tag (not the existing one) so the
+#                           previously-published URL's content never
+#                           changes underneath anyone still holding its
+#                           old sha256.
 #   -h, --help             Show this help.
 #
 # Requires: curl, jq, tar, zstd, git, gh (authenticated), awk. A
