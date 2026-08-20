@@ -27,6 +27,11 @@
 #   desktop_name     display name for the desktop entry (optional,
 #                    defaults to "name" if desktop_type is set but this
 #                    isn't)
+#   icon             path to an icon file, relative to the tree root, to
+#                    show in the launcher next to a desktop_type =
+#                    "application" entry (optional; only valid with
+#                    tree = "true" — a single-binary package has no
+#                    resource tree to find an icon file in)
 #
 # Where the upstream lives — exactly one of these two:
 #
@@ -160,6 +165,7 @@ platform = "linux-x86_64"
 description = "Fast, private, and safe web browser"
 desktop_type = "application"
 desktop_name = "Firefox"
+icon = "firefox/browser/chrome/icons/default/default128.png"
 
 # First WM/compositor, and first use of pin_tag: sway's actual latest
 # release (1.12) needs wlroots >=0.20.0, but Ubuntu 24.04 (the CI

@@ -50,6 +50,11 @@
 #                         common case).
 #   --desktop-name NAME    Display name for the desktop entry (default:
 #                         <name>). Only meaningful with --desktop-type.
+#   --icon PATH             (--tree only) Path to an icon file, relative to
+#                         DIR, to show in the launcher (e.g. fuzzel/rofi)
+#                         next to a --desktop-type application entry.
+#                         Verified to exist in the tree at packaging time,
+#                         same as --entry. Optional even with --tree.
 #   -r, --repo OWNER/REPO GitHub repo the asset will be hosted on
 #                         (default: parsed from `git remote get-url origin`).
 #   -t, --tag TAG          Release tag used in the download URL
@@ -72,7 +77,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '2,71p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,75p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 err() {
@@ -90,6 +95,7 @@ tag=""
 out_dir="./dist"
 desktop_type=""
 desktop_name=""
+icon=""
 
 positional=()
 while [ $# -gt 0 ]; do
@@ -104,6 +110,7 @@ while [ $# -gt 0 ]; do
         -o|--out)         out_dir=$2; shift 2 ;;
         --desktop-type)   desktop_type=$2; shift 2 ;;
         --desktop-name)   desktop_name=$2; shift 2 ;;
+        --icon)           icon=$2; shift 2 ;;
         -h|--help)        usage; exit 0 ;;
         --) shift; while [ $# -gt 0 ]; do positional+=("$1"); shift; done ;;
         -*) err "unknown option: $1" ;;
@@ -134,6 +141,8 @@ if [ -n "$desktop_type" ]; then
 elif [ -n "$desktop_name" ]; then
     err "--desktop-name has no effect without --desktop-type"
 fi
+
+[ -z "$icon" ] || [ -n "$tree_dir" ] || err "--icon requires --tree — single-binary mode has no resource tree to find an icon file in"
 
 command -v tar  >/dev/null || err "tar not found"
 command -v zstd >/dev/null || err "zstd not found (install via your package manager, e.g. brew install zstd)"
@@ -179,6 +188,7 @@ if [ -n "$tree_dir" ]; then
     chmod +x "$entry_path"
     installed_name=$(basename "$entry_rel")
     bin_field_value="$entry_rel"
+    [ -z "$icon" ] || [ -f "$staging/$icon" ] || err "icon \"$icon\" not found in tree (looked for $staging/$icon)"
 else
     [ -n "$bin_name" ] || bin_name=$(basename "$binary")
     mkdir -p "$staging/bin"
@@ -286,10 +296,15 @@ if [ -n "$desktop_type" ]; then
     fi
 fi
 
+icon_field=""
+[ -n "$icon" ] && icon_field=",
+      \"icon\": \"$icon\""
+
 echo "Package:     $name $version" >&2
 echo "Bin:         $installed_name" >&2
 [ "${#lib_names[@]}" -gt 0 ] && echo "Libs:        ${lib_names[*]}" >&2
 [ -n "$desktop_type" ] && echo "Desktop:     $desktop_type${desktop_name:+ ($desktop_name)}" >&2
+[ -n "$icon" ] && echo "Icon:        $icon" >&2
 echo "Artifact:    $archive" >&2
 echo "SHA256:      $sha" >&2
 echo "Release tag: $tag" >&2
@@ -306,6 +321,6 @@ cat <<JSON
       "url": "$url",
       "sha256": "$sha",
       "description": "$description",
-      "bin": ["$bin_field_value"]$libs_field$desktop_field
+      "bin": ["$bin_field_value"]$libs_field$desktop_field$icon_field
     }
 JSON
