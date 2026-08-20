@@ -296,6 +296,27 @@ process_package() {
 
     echo "outdated: $name ${current_version:-<not indexed>} -> $latest_version" >&2
 
+    # A forced repackage with no actual version bump (packaging logic
+    # changed, not upstream — e.g. the GPU-driver-lib exclusion fix, or
+    # adding desktop_type/icon fields to an existing entry) would
+    # otherwise reuse the exact same release tag as before, and
+    # `gh release upload --clobber` further down would overwrite that
+    # tag's existing asset in place — silently changing what bytes a
+    # fixed, already-published URL points to. Any fap.lock, index
+    # cache, or CDN edge holding the OLD sha256 for that URL then
+    # legitimately fails integrity verification against the NEW bytes
+    # (this is exactly how it broke for real: a user's cached
+    # stable.json still had firefox's pre-icon sha256, while the
+    # tarball at the unchanged URL had already become the post-icon
+    # one). Giving a same-version forced repackage its own disambiguated
+    # tag keeps every published URL's content permanently fixed once
+    # published, the same content-addressing guarantee fap.lock's
+    # sha256 field assumes everywhere else.
+    local tag_override=""
+    if [ "$name" = "$FORCE_NAME" ] && [ -n "$current_version" ] && [ "$current_version" = "$latest_version" ]; then
+        tag_override="${name}-${latest_version}${platform:+-$platform}-repack$(date +%s)"
+    fi
+
     local asset_url=""
     if [ "$build_from_source" != "true" ]; then
         if [ "$source_mode" = "github" ]; then
@@ -383,6 +404,7 @@ process_package() {
             ${desktop_type:+--desktop-type "$desktop_type"} \
             ${desktop_name:+--desktop-name "$desktop_name"} \
             ${icon:+--icon "$icon"} \
+            ${tag_override:+--tag "$tag_override"} \
             --out "$dist") || { echo "skip: $name: package.sh failed" >&2; return 1; }
     else
         [ -f "$resolved_bin" ] || { echo "skip: $name: expected binary not found at $resolved_bin" >&2; return 1; }
@@ -394,14 +416,21 @@ process_package() {
             ${desktop_type:+--desktop-type "$desktop_type"} \
             ${desktop_name:+--desktop-name "$desktop_name"} \
             ${icon:+--icon "$icon"} \
+            ${tag_override:+--tag "$tag_override"} \
             --out "$dist") || { echo "skip: $name: package.sh failed" >&2; return 1; }
     fi
 
     local archives=("$dist"/*.tar.zst)
     local archive="${archives[0]}"
     [ -f "$archive" ] || { echo "skip: $name: package.sh produced no tarball" >&2; return 1; }
-    local tag
-    tag=$(basename "$archive" .tar.zst)
+    # The archive's filename is always name-version[-platform], regardless
+    # of --tag — package.sh only lets the release tag itself (part of the
+    # download URL's path, not the filename) diverge from that. Must match
+    # whatever tag_override actually got passed to package.sh above, or
+    # the release this script creates/uploads to won't be the one
+    # entry_json's own "url" field (already built by package.sh using the
+    # real tag) points at.
+    local tag="${tag_override:-$(basename "$archive" .tar.zst)}"
 
     git fetch -q origin main || { echo "skip: $name: git fetch origin main failed" >&2; return 1; }
     git push -q origin --delete "$branch" >/dev/null 2>&1 || true
