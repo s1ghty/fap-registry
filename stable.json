@@ -72,7 +72,7 @@
       "name": "sway",
       "version": "1.9",
       "url": "https://github.com/s1ghty/fap-registry/releases/download/sway-1.9-linux-x86_64/sway-1.9-linux-x86_64.tar.zst",
-      "sha256": "c46b01d561a965906724f146242796d22311512b084e66277eee53cc7f2d7391",
+      "sha256": "792d0e5e4df56c7019d6c50630d7829706b510c63cd9206c54173ea168caf1a3",
       "description": "i3-compatible tiling Wayland compositor (built from source, pinned to 1.9 for wlroots compatibility)",
       "bin": [
         "sway"
@@ -111,11 +111,6 @@
         "libthai.so.0",
         "libharfbuzz.so.0",
         "libffi.so.8",
-        "libdrm.so.2",
-        "libEGL.so.1",
-        "libgbm.so.1",
-        "libGLESv2.so.2",
-        "libvulkan.so.1",
         "libseat.so.1",
         "libdisplay-info.so.1",
         "libliftoff.so.0",
@@ -140,7 +135,6 @@
         "libselinux.so.1",
         "libdatrie.so.1",
         "libgraphite2.so.3",
-        "libGLdispatch.so.0",
         "libsystemd.so.0",
         "libbsd.so.0",
         "libbrotlicommon.so.1",
