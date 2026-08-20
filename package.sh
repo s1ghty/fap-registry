@@ -174,12 +174,25 @@ fi
 # target system's own copy, even at the same soname version — fap's
 # "libs" mechanism (bundled .so + wrapper script, see fap.h) exists
 # exactly for this. Applies the same way in --tree mode, aimed at the
-# entry binary specifically — deliberately NOT an attempt to bundle an
-# entire desktop dependency stack (GTK, X11, ...) for something like
-# Firefox; those are assumed already present on any real desktop
-# system, same as Firefox's own official tarball assumes. ldd only
-# exists on Linux, so on macOS this is a no-op with a note — same as
-# it's always effectively been until now.
+# entry binary specifically. ldd only exists on Linux, so on macOS this
+# is a no-op with a note — same as it's always effectively been until
+# now.
+#
+# GPU/graphics-driver-stack libraries are a second, harder exclusion
+# category, confirmed necessary by a real failure, not a hypothetical
+# one: sway packaged on Ubuntu CI bundled its libgbm.so.1, and on a
+# real Arch machine that bundled copy tried (and failed) to load a
+# DRI driver plugin from Ubuntu's own path layout instead of using
+# Arch's already-correct, already-installed libgbm — "MESA-LOADER:
+# failed to open dri: .../gbm/dri_gbm.so ... gbm_create_device
+# failed". These libraries are fundamentally different from ncurses:
+# ncurses is a portable application library where any recent build
+# works anywhere, but EGL/GBM/GLES/Vulkan's entire job is dispatching
+# to whatever vendor-specific driver plugin the CURRENT machine's
+# actual GPU needs (Mesa/Nouveau, AMD, Intel, proprietary NVIDIA,
+# ...), discovered via paths and manifests baked in at the build
+# machine's own distro layout. There is no portable "right" build of
+# these to bundle — always defer to the target system's own copy.
 lib_names=()
 if command -v ldd >/dev/null 2>&1 && ldd "$entry_path" >/dev/null 2>&1; then
     mkdir -p "$staging/lib"
@@ -190,6 +203,9 @@ if command -v ldd >/dev/null 2>&1 && ldd "$entry_path" >/dev/null 2>&1; then
         libname=$(basename "$libpath")
         case "$libname" in
             ld-linux*.so*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libresolv.so.*|libgcc_s.so.*)
+                continue ;;
+            libGL.so*|libGLX.so*|libOpenGL.so*|libGLESv1_CM.so*|libGLESv2.so*|libGLdispatch.so*| \
+            libEGL.so*|libgbm.so*|libdrm.so*|libdrm_*.so*|libvulkan.so*|libnvidia-*.so*)
                 continue ;;
         esac
         # Already self-satisfied via the package's own directory (e.g. a
