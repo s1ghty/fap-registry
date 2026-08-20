@@ -62,13 +62,14 @@
       "name": "firefox",
       "version": "154.0",
       "url": "https://github.com/s1ghty/fap-registry/releases/download/firefox-154.0-linux-x86_64/firefox-154.0-linux-x86_64.tar.zst",
-      "sha256": "645901a7380d5718ad5f102e35f8db8b53e20fdb875056b2aad7da9353b18016",
+      "sha256": "5cc8bb82c0d9cbced37461825aa4c863e2598c0893406b1326dd9fd49fc2c181",
       "description": "Fast, private, and safe web browser",
       "bin": [
         "firefox/firefox"
       ],
       "desktop_type": "application",
-      "desktop_name": "Firefox"
+      "desktop_name": "Firefox",
+      "icon": "firefox/browser/chrome/icons/default/default128.png"
     },
     {
       "name": "sway",
