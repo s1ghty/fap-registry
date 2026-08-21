@@ -252,6 +252,10 @@ process_package() {
             return 1
         fi
         tag_name=$(jq -r '.tag_name' <<<"$release_json")
+        if [ -z "$tag_name" ] || [ "$tag_name" = "null" ]; then
+            echo "skip: $name: GitHub API returned no usable tag_name for $repo (rate-limited or unexpected response?)" >&2
+            return 1
+        fi
         latest_version=${tag_name#"$version_prefix"}
     else
         local version_resp

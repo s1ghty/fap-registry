@@ -225,6 +225,18 @@ fi
 # ...), discovered via paths and manifests baked in at the build
 # machine's own distro layout. There is no portable "right" build of
 # these to bundle — always defer to the target system's own copy.
+#
+# libglapi.so is in this list for a subtler reason than the others:
+# it's Mesa's internal GL dispatch table, not something a binary links
+# against directly — but libGL.so/libEGL.so link against IT, so ldd
+# still surfaces it in the transitive closure even though libGL/libEGL
+# themselves are already excluded above. Same "always defer to the
+# target machine" reasoning as the rest of this list, just one hop
+# further down the dependency graph. libcuda.so/libnvcuvid.so/
+# libOpenCL.so cover the NVIDIA CUDA/NVDEC/OpenCL case (relevant to any
+# entry built with hardware video encode/decode support, e.g. ffmpeg)
+# for the same reason libnvidia-*.so already is — none of the three
+# happen to match that glob.
 lib_names=()
 if command -v ldd >/dev/null 2>&1 && ldd "$entry_path" >/dev/null 2>&1; then
     mkdir -p "$staging/lib"
@@ -237,7 +249,8 @@ if command -v ldd >/dev/null 2>&1 && ldd "$entry_path" >/dev/null 2>&1; then
             ld-linux*.so*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libresolv.so.*|libgcc_s.so.*)
                 continue ;;
             libGL.so*|libGLX.so*|libOpenGL.so*|libGLESv1_CM.so*|libGLESv2.so*|libGLdispatch.so*| \
-            libEGL.so*|libgbm.so*|libdrm.so*|libdrm_*.so*|libvulkan.so*|libnvidia-*.so*)
+            libEGL.so*|libgbm.so*|libdrm.so*|libdrm_*.so*|libvulkan.so*|libnvidia-*.so*| \
+            libglapi.so*|libcuda.so*|libnvcuvid.so*|libOpenCL.so*)
                 continue ;;
         esac
         # Already self-satisfied via the package's own directory (e.g. a
