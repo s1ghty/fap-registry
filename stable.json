@@ -50,9 +50,9 @@
     },
     {
       "name": "neovim",
-      "version": "0.12.4",
-      "url": "https://github.com/s1ghty/fap-registry/releases/download/neovim-0.12.4-linux-x86_64/neovim-0.12.4-linux-x86_64.tar.zst",
-      "sha256": "12b168fa1bfb178b0ec4eeeb673f08b231381bc639c6189357cbc5d2d57f7bdb",
+      "version": "0.12.5",
+      "url": "https://github.com/s1ghty/fap-registry/releases/download/neovim-0.12.5-linux-x86_64/neovim-0.12.5-linux-x86_64.tar.zst",
+      "sha256": "8029732b87363e6425ef78f985fb2b963767083f9df3e168a25dc85fd3838a68",
       "description": "Hyperextensible Vim-based text editor",
       "bin": [
         "nvim-linux-x86_64/bin/nvim"
