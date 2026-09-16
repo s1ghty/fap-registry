@@ -60,9 +60,9 @@
     },
     {
       "name": "firefox",
-      "version": "155.0",
-      "url": "https://github.com/s1ghty/fap-registry/releases/download/firefox-155.0-linux-x86_64/firefox-155.0-linux-x86_64.tar.zst",
-      "sha256": "77e7c9ace1cf14a680607ab39060d16c3c760b4f2013e621aea57e0d70fc1c13",
+      "version": "156.0",
+      "url": "https://github.com/s1ghty/fap-registry/releases/download/firefox-156.0-linux-x86_64/firefox-156.0-linux-x86_64.tar.zst",
+      "sha256": "89b5cfe63c9a12a7f9d4cd6c1d2b0ab818dbe026ba7a52f732c57f55f6d4861c",
       "description": "Fast, private, and safe web browser",
       "bin": [
         "firefox/firefox"
