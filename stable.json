@@ -13,9 +13,9 @@
     },
     {
       "name": "fastfetch",
-      "version": "2.70.0",
-      "url": "https://github.com/s1ghty/fap-registry/releases/download/fastfetch-2.70.0-linux-x86_64/fastfetch-2.70.0-linux-x86_64.tar.zst",
-      "sha256": "6216b328e67d02459e5c990fa07798f2ae516a6106e9f8a926323edc74f8cdb5",
+      "version": "2.72.0",
+      "url": "https://github.com/s1ghty/fap-registry/releases/download/fastfetch-2.72.0-linux-x86_64/fastfetch-2.72.0-linux-x86_64.tar.zst",
+      "sha256": "6e52a94892ab8bc9c04f3ba579b913c4ff7aea3f72418bd9d579c936bd7f5aad",
       "description": "Feature-rich, performance-oriented system information tool (Linux x86_64)",
       "bin": [
         "fastfetch"
